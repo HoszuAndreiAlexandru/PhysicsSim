@@ -13,10 +13,74 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\src">
+      <UniqueIdentifier>{f137f5ee-297a-4156-a0a0-56a5da21b374}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\camera">
+      <UniqueIdentifier>{04743193-aed3-41b4-9b7c-857902411201}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\mesh">
+      <UniqueIdentifier>{a785935f-7e28-4ed5-b91a-072a75e5b1fe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\shaders">
+      <UniqueIdentifier>{4b20d5b7-6ed6-4c7a-a8f6-f72134b7fa79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\src\window">
+      <UniqueIdentifier>{85265175-a94c-420a-8c10-abade83725c3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PhysicsSim.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\camera\camera.cpp">
+      <Filter>Source Files\src\camera</Filter>
+    </ClCompile>
+    <ClCompile Include="src\mesh\mesh.cpp">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="src\mesh\meshLoaderObj.cpp">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="src\mesh\texture.cpp">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="src\window\window.cpp">
+      <Filter>Source Files\src\window</Filter>
+    </ClCompile>
+    <ClCompile Include="src\shaders\shader.cpp">
+      <Filter>Source Files\src\shaders</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\camera\camera.h">
+      <Filter>Source Files\src\camera</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mesh\mesh.h">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mesh\meshLoaderObj.h">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mesh\stringTokenizer.h">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="src\mesh\texture.h">
+      <Filter>Source Files\src\mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="src\window\window.h">
+      <Filter>Source Files\src\window</Filter>
+    </ClInclude>
+    <ClInclude Include="src\shaders\shader.h">
+      <Filter>Source Files\src\shaders</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\shaders\fragment_shader.glsl">
+      <Filter>Source Files\src\shaders</Filter>
+    </None>
+    <None Include="src\shaders\vertex_shader.glsl">
+      <Filter>Source Files\src\shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>
