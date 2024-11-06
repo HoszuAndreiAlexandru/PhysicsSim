@@ -10,15 +10,17 @@ uniform sampler2D texture1;
 uniform vec3 lightColor;
 uniform vec3 lightPos;
 uniform vec3 viewPos;
+uniform vec3 objectColor;
 
 void main()
 {
 	//Ambient light
 	float ambientStrength = 0.5;
     vec3 ambient = ambientStrength * lightColor;
-//	vec3 objectColor = vec3(1.0f, 0.5f, 0.31f);
+	//vec3 objectColor = vec3(1.0f, 0.5f, 0.31f);
+	//vec3 objectColor = vec3(0.0f, 1.0f, 0.0f);
 
-	//vec3 result = ambient * objectColor;
+	vec3 result = ambient * objectColor;
 	//fragColor = vec4(result, 1.0f);
 
 	//Diffuse light
@@ -35,7 +37,7 @@ void main()
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64);
 	vec3 specular = specularStrength * spec * lightColor; 
 
-	vec3 result = ambient + diffuse + specular;
-	fragColor = vec4(result, 1.0f);
-	fragColor = fragColor * texture(texture1, textureCoord);
+	//vec3 result = ambient + diffuse + specular;
+	fragColor = vec4(objectColor, 1.0f);
+	//fragColor = fragColor * texture(texture1, textureCoord);
 }

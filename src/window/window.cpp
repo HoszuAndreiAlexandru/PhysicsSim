@@ -66,6 +66,7 @@ void Window::init()
 
 void Window::update()
 {
+	glClearColor(0, 0, 0, 1.0f);
 	glfwPollEvents();
 	glfwGetFramebufferSize(window, &width, &height);
 	glViewport(0, 0, width, height);

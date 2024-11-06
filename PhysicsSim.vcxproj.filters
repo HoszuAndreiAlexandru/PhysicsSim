@@ -28,6 +28,9 @@
     <Filter Include="Source Files\src\window">
       <UniqueIdentifier>{85265175-a94c-420a-8c10-abade83725c3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\src\object">
+      <UniqueIdentifier>{cedb8638-76ca-4d6d-865f-8f41719a93d3}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PhysicsSim.cpp">
@@ -51,6 +54,9 @@
     <ClCompile Include="src\shaders\shader.cpp">
       <Filter>Source Files\src\shaders</Filter>
     </ClCompile>
+    <ClCompile Include="src\object\object.cpp">
+      <Filter>Source Files\src\object</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\camera\camera.h">
@@ -73,6 +79,9 @@
     </ClInclude>
     <ClInclude Include="src\shaders\shader.h">
       <Filter>Source Files\src\shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="src\object\object.h">
+      <Filter>Source Files\src\object</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -149,6 +149,7 @@
     <ClCompile Include="src\mesh\mesh.cpp" />
     <ClCompile Include="src\mesh\meshLoaderObj.cpp" />
     <ClCompile Include="src\mesh\texture.cpp" />
+    <ClCompile Include="src\object\object.cpp" />
     <ClCompile Include="src\shaders\shader.cpp" />
     <ClCompile Include="src\window\window.cpp" />
   </ItemGroup>
@@ -158,6 +159,7 @@
     <ClInclude Include="src\mesh\meshLoaderObj.h" />
     <ClInclude Include="src\mesh\stringTokenizer.h" />
     <ClInclude Include="src\mesh\texture.h" />
+    <ClInclude Include="src\object\object.h" />
     <ClInclude Include="src\shaders\shader.h" />
     <ClInclude Include="src\window\window.h" />
   </ItemGroup>

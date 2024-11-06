@@ -14,7 +14,6 @@ class Camera
 		glm::vec3 cameraUp;
 		glm::vec3 right;
 
-		//rotation - to be removed
 		float rotationOx;
 		float rotationOy;
 
@@ -37,7 +36,7 @@ class Camera
 		void rotateOx(float angle);
 		void rotateOy(float angle);
 
-		void mouseMovement(float xoffset, float yoffset);
+		void mouseMovement(float xpos, float ypos, int windowWidth, int windowHeight);
 		void update(float xoffset, float yoffset);
 };
 
