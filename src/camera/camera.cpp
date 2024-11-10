@@ -12,8 +12,8 @@ Camera::Camera(glm::vec3 cameraPosition)
 
 Camera::Camera()
 {
-	this ->cameraPosition = glm::vec3(0.0f, 0.0f, 65.0f);
-	this ->cameraViewDirection = glm::vec3(0.0f, 0.0f, -1.0f);
+	this ->cameraPosition = glm::vec3(0.0f, 3.0f - 30.0f, 10.0f);
+	this ->cameraViewDirection = glm::vec3(0.0f, -1.0f, -1.0f);
 	this ->cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 	this->rotationOx = 0.0f;
 	this->rotationOy = -90.0f;

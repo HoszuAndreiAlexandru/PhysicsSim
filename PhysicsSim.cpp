@@ -22,12 +22,16 @@ class GameObject
 		glm::vec3 colour;
 		MeshType meshType;
 		double scale = 1;
+		float mass = 1;
+		float inverseMass = 1 / mass;
 		glm::vec3 rotation = glm::vec3(0);
 		glm::vec3 velocity = glm::vec3(0.0f);
 		glm::vec3 acceleration = glm::vec3(0.0f);
 		glm::vec3 halfExtents = glm::vec3(1.0f);
 		glm::vec3 angularVelocity = glm::vec3(0.0f);
 		glm::vec3 angularAcceleration = glm::vec3(0.0f);
+		double staticFriction = 0.4f;
+		double dynamicFriction = 0.8f;
 
 		GameObject(){}
 		~GameObject(){}
@@ -84,6 +88,7 @@ glm::mat4 ViewMatrix;
 const glm::vec3 gravity(0.0f, -9.81f, 0.0f);
 //const float damping = 0.999f;
 const float damping = 1;
+const glm::vec3 GRAVITY(0.0f, -9.81f, 0.0f); // Gravity vector
 
 float randomFloatUnitClamped()
 {
@@ -159,170 +164,302 @@ void drawCollisionBox(Mesh& model)
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
-// Function to detect and handle sphere-sphere collision
-bool detectAndResolveSphereCollision(GameObject& a, GameObject& b) {
-	glm::vec3 delta = b.position - a.position;
-	float distance = glm::length(delta);
-	float combinedRadius = a.scale + b.scale;
-
-	if (distance < combinedRadius) {
-		// Calculate the collision response
-		glm::vec3 collisionNormal = glm::normalize(delta);
-		float penetrationDepth = combinedRadius - distance;
-
-		// Resolve the collision by moving the objects apart
-		a.position -= collisionNormal * (penetrationDepth / 2.0f);
-		b.position += collisionNormal * (penetrationDepth / 2.0f);
-
-		// Swap velocity components (simplified elastic collision)
-		glm::vec3 relativeVelocity = b.velocity - a.velocity;
-		float impactSpeed = glm::dot(relativeVelocity, collisionNormal);
-
-		if (impactSpeed < 0) { // Objects are moving toward each other
-			glm::vec3 impulse = collisionNormal * impactSpeed;
-			a.velocity -= impulse;
-			b.velocity += impulse;
-		}
-
-		return true;
-	}
-	return false;
-}
-
-// Function to detect and handle AABB (box-box) collision
-bool detectAndResolveBoxCollision(GameObject& a, GameObject& b) {
-
-	// Check for overlap in the x, y, and z axes
-	bool overlapX = std::abs(a.position.x - b.position.x) < (a.halfExtents.x + b.halfExtents.x);
-	bool overlapY = std::abs(a.position.y - b.position.y) < (a.halfExtents.y + b.halfExtents.y);
-	bool overlapZ = std::abs(a.position.z - b.position.z) < (a.halfExtents.z + b.halfExtents.z);
-
-	if (overlapX && overlapY && overlapZ) {
-		//std::cout << "there is a collission" << std::endl;
-		
-		// Calculate the penetration depth along each axis
-		float penX = (a.halfExtents.x + b.halfExtents.x) - std::abs(a.position.x - b.position.x);
-		float penY = (a.halfExtents.y + b.halfExtents.y) - std::abs(a.position.y - b.position.y);
-		float penZ = (a.halfExtents.z + b.halfExtents.z) - std::abs(a.position.z - b.position.z);
-
-		// Find the axis of minimum penetration
-		glm::vec3 correction(0.0f);
-		float correctionFactor = 0.02f;
-		if (penX < penY && penX < penZ) {
-			correction.x = penX * (a.position.x < b.position.x ? -correctionFactor : correctionFactor);
-		}
-		if (penY < penX && penY < penZ) {
-			correction.y = penY * (a.position.y < b.position.y ? -correctionFactor : correctionFactor);
-		}
-		if (penZ < penX && penZ < penY)
-		{
-			correction.z = penZ * (a.position.z < b.position.z ? -correctionFactor : correctionFactor);
-		}
-
-		// Apply the correction to both objects
-
-		a.position += correction;
-		b.position -= correction;
-
-		// Adjust velocities (basic velocity response)
-		glm::vec3 collisionNormal = correction;
-		glm::vec3 relativeVelocity = b.velocity - a.velocity;
-		glm::vec3 relativeAngularVelocity = b.angularVelocity - a.angularVelocity;
-
-		float impactSpeed = glm::dot(relativeVelocity, collisionNormal);
-
-		if (impactSpeed < 0) { // Only adjust if moving toward each other
-			glm::vec3 impulse = collisionNormal * impactSpeed;
-			a.velocity -= impulse;
-			b.velocity += impulse;
-
-			// Calculate and apply torque
-			glm::vec3 torque1 = glm::cross(a.halfExtents, impulse);
-			glm::vec3 torque2 = glm::cross(b.halfExtents, impulse);
-			a.angularAcceleration += torque1;
-			b.angularAcceleration += torque2;
-		}
-
-		return true;
-	}
-	return false;
-}
-
-void calculateCollision(GameObject& go1, GameObject& go2)
+double pythagoreanSolve(double a, double b)
 {
-	if (go1.meshType == SPHERE && go2.meshType == SPHERE) {
-		detectAndResolveSphereCollision(go1, go2);
+	return glm::sqrt(a * a + b * b);
+}
+
+void applyForces(GameObject& gameObject1, GameObject& gameObject2, float dampenFactor = 0.1f)
+{
+	// Calculate radii from COM to contact
+	glm::vec3 ra = contacts[i] - A->position;
+	glm::vec3 rb = contacts[i] - B->position;
+
+	// Relative velocity
+	glm::vec3 rv = B->velocity + Cross(B->angularVelocity, rb) -
+		A->velocity - Cross(A->angularVelocity, ra);
+
+	// Relative velocity along the normal
+	double contactVel = glm::dot(rv, normal);
+
+	// Do not resolve if velocities are separating
+	if (contactVel > 0)
+		return;
+
+	real raCrossN = Cross(ra, normal);
+	real rbCrossN = Cross(rb, normal);
+	real invMassSum = A->im + B->im + Sqr(raCrossN) * A->iI + Sqr(rbCrossN) * B->iI;
+
+	// Calculate impulse scalar
+	real j = -(1.0f + e) * contactVel;
+	j /= invMassSum;
+	j /= (real)contact_count;
+
+	// Apply impulse
+	Vec2 impulse = normal * j;
+	A->ApplyImpulse(-impulse, ra);
+	B->ApplyImpulse(impulse, rb);
+
+	// Friction impulse
+	rv = B->velocity + Cross(B->angularVelocity, rb) -
+		A->velocity - Cross(A->angularVelocity, ra);
+
+	Vec2 t = rv - (normal * Dot(rv, normal));
+	t.Normalize();
+
+	// j tangent magnitude
+	real jt = -Dot(rv, t);
+	jt /= invMassSum;
+	jt /= (real)contact_count;
+
+	// Don't apply tiny friction impulses
+	if (Equal(jt, 0.0f))
+		return;
+
+	// Coulumb's law
+	Vec2 tangentImpulse;
+	if (std::abs(jt) < j * sf)
+		tangentImpulse = t * jt;
+	else
+		tangentImpulse = t * -j * df;
+
+	// Apply friction impulse
+	A->ApplyImpulse(-tangentImpulse, ra);
+	B->ApplyImpulse(tangentImpulse, rb);
+
+	/*
+	// Calculate the collision normal (direction from objA to objB)
+	glm::vec3 collisionNormal = glm::normalize(gameObject2.position - gameObject1.position);
+
+	// Calculate relative velocity along the collision normal
+	glm::vec3 relativeVelocity = gameObject2.velocity - gameObject1.velocity;
+	float velocityAlongNormal = glm::dot(relativeVelocity, collisionNormal);
+
+	// If the objects are moving apart, no need to apply forces
+	if (velocityAlongNormal > 0) return;
+
+	// Calculate restitution (bounciness) using the dampenFactor
+	float restitution = dampenFactor;
+
+	// Calculate the impulse scalar
+	float impulseScalar = -(1 + restitution) * velocityAlongNormal;
+
+	// Calculate the impulse vector
+	glm::vec3 impulse = impulseScalar * collisionNormal;
+
+	// Apply the impulse to each object's velocity (linear response)
+	gameObject1.velocity -= impulse;
+	gameObject2.velocity += impulse;
+
+	// ---- Step 1: Calculate Tangential (Friction) Impulse ----
+
+	// Find the tangent vector for the friction impulse
+	
+	glm::vec3 tangent = relativeVelocity - glm::dot(relativeVelocity, collisionNormal) * collisionNormal;
+	tangent = glm::normalize(tangent);
+
+	// Calculate the magnitude of the friction impulse
+	float frictionCoefficient = 0.1f; // adjust this value for more or less friction
+	float frictionImpulseMagnitude = -glm::dot(relativeVelocity, tangent) * frictionCoefficient;
+	frictionImpulseMagnitude /= (gameObject1.inverseMass + gameObject2.inverseMass);
+
+	float mu = pythagoreanSolve(gameObject1.staticFriction, gameObject2.staticFriction);
+
+	// Apply friction impulse in the direction of the tangent
+	glm::vec3 frictionImpulse = frictionImpulseMagnitude * tangent;
+
+	if (abs(frictionImpulseMagnitude) >= impulseScalar * mu)
+	{
+		float dynamicFriction = pythagoreanSolve(gameObject1.dynamicFriction, gameObject2.dynamicFriction);
+		frictionImpulse = -impulseScalar * tangent * dynamicFriction;
 	}
-	else if (go1.meshType == BOX && go2.meshType == BOX) {
-		detectAndResolveBoxCollision(go1, go2);
+
+	gameObject1.velocity -= glm::vec3(gameObject1.inverseMass) * frictionImpulse;
+	gameObject2.velocity += glm::vec3(gameObject2.inverseMass) * frictionImpulse;
+
+	//float penX = (gameObject2.halfExtents.x + gameObject1.halfExtents.x) - std::abs(gameObject2.position.x - gameObject1.position.x);
+	//float penY = (gameObject2.halfExtents.y + gameObject1.halfExtents.y) - std::abs(gameObject2.position.y - gameObject1.position.y);
+	//float penZ = (gameObject2.halfExtents.z + gameObject1.halfExtents.z) - std::abs(gameObject2.position.z - gameObject1.position.z);
+	//glm::vec3 penetrationDepth = glm::vec3(penX, penY, penZ);
+
+	
+
+	//const float percent = 0.2; // usually 20% to 80%
+	//const float slop = 0.1;
+	//glm::vec3 correction = glm::max(penetrationDepth - slop, 0.0f) / (gameObject1.inverseMass + gameObject2.inverseMass) * percent * collisionNormal;
+	//gameObject1.position -= glm::vec3(gameObject1.inverseMass) * correction;
+	//gameObject2.position += glm::vec3(gameObject2.inverseMass) * correction;
+
+
+
+
+	// ---- Step 2: Apply Angular Impulse for Rotation ----
+
+	// Assume center of mass at position and calculate collision points
+
+	
+	
+	glm::vec3 collisionPoint1 = gameObject1.position + collisionNormal * glm::vec3(gameObject1.scale);
+	glm::vec3 collisionPoint2 = gameObject2.position - collisionNormal * glm::vec3(gameObject2.scale);
+
+	// Calculate relative position vectors from centers of mass to collision points
+	glm::vec3 r1 = collisionPoint1 - gameObject1.position;
+	glm::vec3 r2 = collisionPoint2 - gameObject2.position;
+
+	// Calculate torque induced by the impulse
+	glm::vec3 torque1 = glm::cross(r1, impulse + frictionImpulse);
+	glm::vec3 torque2 = glm::cross(r2, -(impulse + frictionImpulse));
+
+	// Update angular velocity (assuming a unit moment of inertia for simplicity)
+	float momentOfInertia = 1.0f; // adjust as necessary for different objects
+	gameObject1.angularVelocity += torque1 / momentOfInertia;
+	gameObject2.angularVelocity += torque2 / momentOfInertia;
+	
+
+
+	
+
+	// Calculate the point of collision on each object relative to its center
+	glm::vec3 collisionPointA = gameObject1.position + collisionNormal * glm::vec3(gameObject1.scale);
+	glm::vec3 collisionPointB = gameObject2.position - collisionNormal * glm::vec3(gameObject2.scale);
+
+	// Calculate the torque generated on each object due to off-center collision
+	glm::vec3 rA = collisionPointA - gameObject1.position; // Vector from objA's center to collision point
+	glm::vec3 rB = collisionPointB - gameObject2.position; // Vector from objB's center to collision point
+
+	glm::vec3 torqueA = glm::cross(rA, impulse); // Torque on objA
+	glm::vec3 torqueB = glm::cross(rB, -impulse); // Torque on objB
+
+	// Update angular velocities (assuming a simple mass of 1 for rotation)
+	gameObject1.angularVelocity += torqueA;
+	gameObject2.angularVelocity += torqueB;
+	*/
+}
+
+bool checkCollision(GameObject& gameObject1, GameObject& gameObject2)
+{
+	if ((gameObject1.meshType == BOX && gameObject2.meshType == BOX) || (gameObject1.meshType == CYLINDER && gameObject2.meshType == CYLINDER))
+	{
+		bool overlapX = std::abs(gameObject1.position.x - gameObject2.position.x) <= (gameObject1.halfExtents.x + gameObject2.halfExtents.x);
+		bool overlapY = std::abs(gameObject1.position.y - gameObject2.position.y) <= (gameObject1.halfExtents.y + gameObject2.halfExtents.y);
+		bool overlapZ = std::abs(gameObject1.position.z - gameObject2.position.z) <= (gameObject1.halfExtents.z + gameObject2.halfExtents.z);
+		return overlapX && overlapY && overlapZ;
 	}
+	else if (gameObject1.meshType == SPHERE && gameObject2.meshType == SPHERE)
+	{
+		float radiusA = gameObject1.halfExtents.x;
+		float radiusB = gameObject2.halfExtents.x;
+		float distance = glm::distance(gameObject1.position, gameObject2.position);
+		return distance <= (radiusA + radiusB);
+	}
+	else if ((gameObject1.meshType == SPHERE && gameObject2.meshType == BOX) || (gameObject1.meshType == BOX && gameObject2.meshType == SPHERE))
+	{
+		GameObject& sphere = gameObject1;
+		GameObject& box = gameObject2;
+		if (gameObject2.meshType == SPHERE)
+		{
+			sphere = gameObject2;
+			box = gameObject1;
+		}
+		float radius = sphere.halfExtents.x;
+		glm::vec3 closestPoint;
+		for (int i = 0; i < 3; ++i) {
+			closestPoint[i] = std::max(box.position[i] - box.halfExtents[i],
+				std::min(sphere.position[i], box.position[i] + box.halfExtents[i]));
+		}
+		float distanceSquared = glm::distance(closestPoint, sphere.position);
+		return distanceSquared <= (radius * radius);
+	}
+
+	return false;
 }
 
 void simulatePhysics()
 {
-	int i = 0;
-	for (GameObject& obj : objects)
+	float dampenFactor = 0.2f;
+	for (int i = 0; i < objects.size(); i++)
 	{
-		// Apply gravity to objects
-		if (obj.meshType == BOX || obj.meshType == SPHERE || obj.meshType == CYLINDER) {
-			obj.acceleration = gravity;
+		GameObject& obj = objects[i];
+
+		obj.velocity += GRAVITY * deltaTime;
+
+		for (int j = i + 1; j < objects.size(); j++)
+		{
+			if (checkCollision(objects[i], objects[j]))
+			{
+				applyForces(objects[i], objects[j]);
+			}
 		}
 
-		// Integrate acceleration to velocity
+
+
+		/*
+		// Apply gravity to acceleration
+		obj.acceleration += GRAVITY;
+
+		// Integrate acceleration to update velocity and position
 		obj.velocity += obj.acceleration * deltaTime;
-
-		// Integrate angular acceleration to angular velocity
-		obj.angularVelocity += obj.angularAcceleration * deltaTime;
-
-		// Apply damping to simulate friction/resistance
-		obj.velocity *= damping;
-		obj.angularVelocity *= damping;
-
-		// Integrate velocity to position
 		obj.position += obj.velocity * deltaTime;
 
-		// Integrate angular velocity to rotation (using Euler angles)
+		// Optional friction to stabilize stacking
+		float friction = 0.5f;
+		obj.velocity.x *= friction;
+		obj.velocity.z *= friction;
+
+		// Integrate angular velocity to update rotation
 		obj.rotation += obj.angularVelocity * deltaTime;
 
-		// Reset acceleration for the next frame
-		obj.acceleration = glm::vec3(0.0f);
-		obj.angularAcceleration = glm::vec3(0.0f);
+		// Dampen angular velocity slightly for stability
+		if (obj.angularVelocity.x > 0.1f || obj.angularVelocity.y > 0.1f || obj.angularVelocity.z > 0.1f || obj.angularVelocity.x < -0.1f || obj.angularVelocity.y < -0.1f || obj.angularVelocity.z < -0.1f)
+		{
+			//std::cout << obj.angularVelocity.x << " " << obj.angularVelocity.y << " " << obj.angularVelocity.z << std::endl;
+		}
+		obj.angularVelocity *= 0.98f;
 
-		// Check for collision with the boundary box and adjust position/velocity
 		if (obj.position.x - obj.scale < BOUNDARY_MIN.x) {
 			obj.position.x = BOUNDARY_MIN.x + obj.scale; // Keep object inside
-			obj.velocity.x = -obj.velocity.x * 0.5f; // Reverse and dampen velocity
+			obj.velocity.x = -obj.velocity.x * dampenFactor; // Reverse and dampen velocity
 		}
 		else if (obj.position.x + obj.scale > BOUNDARY_MAX.x) {
 			obj.position.x = BOUNDARY_MAX.x - obj.scale;
-			obj.velocity.x = -obj.velocity.x * 0.5f;
+			obj.velocity.x = -obj.velocity.x * dampenFactor;
 		}
 
 		if (obj.position.y - obj.scale < BOUNDARY_MIN.y) {
 			obj.position.y = BOUNDARY_MIN.y + obj.scale;
-			obj.velocity.y = -obj.velocity.y * 0.5f;
+			obj.velocity.y = -obj.velocity.y * dampenFactor;
 		}
 		else if (obj.position.y + obj.scale > BOUNDARY_MAX.y) {
 			obj.position.y = BOUNDARY_MAX.y - obj.scale;
-			obj.velocity.y = -obj.velocity.y * 0.5f;
+			obj.velocity.y = -obj.velocity.y * dampenFactor;
 		}
 
 		if (obj.position.z - obj.scale < BOUNDARY_MIN.z) {
 			obj.position.z = BOUNDARY_MIN.z + obj.scale;
-			obj.velocity.z = -obj.velocity.z * 0.5f;
+			obj.velocity.z = -obj.velocity.z * dampenFactor;
 		}
 		else if (obj.position.z + obj.scale > BOUNDARY_MAX.z) {
 			obj.position.z = BOUNDARY_MAX.z - obj.scale;
-			obj.velocity.z = -obj.velocity.z * 0.5f;
+			obj.velocity.z = -obj.velocity.z * dampenFactor;
 		}
 
-		// Detect and resolve collisions
-		for (size_t j = i + 1; j < objects.size(); ++j)
+		// Reset acceleration for the next frame
+		obj.acceleration = glm::vec3(0.0f);
+
+		if (obj.rotation.x > 0.1f || obj.rotation.y > 0.1f || obj.rotation.z > 0.1f || obj.rotation.x < -0.1f || obj.rotation.y < -0.1f || obj.rotation.z < -0.1f)
 		{
-			calculateCollision(objects[i], objects[j]);
+			//std::cout << obj.rotation.x << " " << obj.rotation.y << " " << obj.rotation.z << std::endl;
 		}
 
-		i++;
+		for (int j = i + 1; j < objects.size(); j++)
+		{
+			if (checkCollision(objects[i], objects[j]))
+			{
+				applyForces(objects[i], objects[j]);
+			}
+		}
+
+		*/
 	}
 }
 
@@ -336,6 +473,29 @@ void createSceneBox()
 	go.scale = 30;
 	objects.push_back(go);
 	sceneBox = go;
+}
+
+void createObject(MeshType meshType, glm::vec3 position)
+{
+	float distance = 30;
+	GameObject go = GameObject();
+	go.position = position;
+	go.scale = 0.5f;
+	switch (meshType)
+	{
+	case SPHERE:
+		go.model = sphere;
+		break;
+	case CYLINDER:
+		go.model = cylinder;
+		break;
+	default:
+		go.model = box;
+		break;
+	}
+	go.meshType = meshType;
+	go.colour = glm::vec3(randomFloatColor(), randomFloatColor(), randomFloatColor());
+	objects.push_back(go);
 }
 
 void createObject(MeshType meshType)
@@ -409,6 +569,10 @@ void resetScene(int sceneId)
 		z *= 5;
 		break;
 	case 4:
+		// test
+
+		break;
+	case 5:
 		// clear scene
 		break;
 	default:
@@ -430,6 +594,13 @@ void resetScene(int sceneId)
 		{
 			//addObject(CYLINDER);
 		}
+	}
+
+	if (sceneId == 4)
+	{
+		createObject(BOX, glm::vec3(0, 0, 0));
+
+		createObject(BOX, glm::vec3(1.5f, 3.0f, 0.0f));
 	}
 }
 
@@ -479,10 +650,10 @@ int main()
 			{
 				ModelMatrix = glm::mat4(1.0);
 				ModelMatrix = glm::scale(ModelMatrix, glm::vec3(objects[i].scale));
-				ModelMatrix = glm::rotate(ModelMatrix, glm::radians(objects[i].rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-				ModelMatrix = glm::rotate(ModelMatrix, glm::radians(objects[i].rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-				ModelMatrix = glm::rotate(ModelMatrix, glm::radians(objects[i].rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
 				ModelMatrix = glm::translate(ModelMatrix, objects[i].position);
+				ModelMatrix = glm::rotate(ModelMatrix, objects[i].rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+				ModelMatrix = glm::rotate(ModelMatrix, objects[i].rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+				ModelMatrix = glm::rotate(ModelMatrix, objects[i].rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
 				MVP = ProjectionMatrix * ViewMatrix * ModelMatrix;
 				glUniformMatrix4fv(MatrixID2, 1, GL_FALSE, &MVP[0][0]);
 				glUniformMatrix4fv(ModelMatrixID, 1, GL_FALSE, &ModelMatrix[0][0]);
@@ -538,9 +709,13 @@ void processKeyboardInput()
 	if (window.isPressed(GLFW_KEY_3))
 		resetScene(3);
 
-	// Clear scene
+	// Test scene
 	if (window.isPressed(GLFW_KEY_4))
 		resetScene(4);
+
+	// Clear scene
+	if (window.isPressed(GLFW_KEY_5))
+		resetScene(5);
 
 	// Add objects
 	if (window.isPressed(GLFW_KEY_Z))
