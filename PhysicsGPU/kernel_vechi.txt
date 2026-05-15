@@ -1,0 +1,328 @@
+#include <cuda_runtime.h>
+
+// Define the GameObjectData structure in C++/CUDA
+struct GameObjectData
+{
+    float positionX;
+    float positionY;
+    float positionZ;
+
+    float scale;
+    int meshType;
+    int shouldCalculate;
+
+    float velocityX;
+    float velocityY;
+    float velocityZ;
+};
+
+struct Vector3
+{
+    float x;
+    float y;
+    float z;
+};
+
+__device__ void multiply(Vector3& x, const float& y) 
+{
+    x.x *= y; 
+    x.y *= y; 
+    x.z *= y;
+}
+
+__device__ Vector3 add(const Vector3& x, const Vector3& y)
+{
+    return Vector3 {
+        x.x + y.x,
+        x.y + y.y,
+        x.z + y.z
+    };
+}
+
+__device__ Vector3 getVector3(const float* gameObjects, const int& i)
+{
+    return Vector3{
+        gameObjects[i],
+        gameObjects[i + 1],
+        gameObjects[i + 2]
+    };
+}
+
+__device__ void applyBoundaryCollision(float* gameObjects, Vector3& velocity, long obj1Idx)
+{
+    const int BOUNDARY_MIN = -30 + gameObjects[obj1Idx + 3];
+    const int BOUNDARY_MAX = 30 - gameObjects[obj1Idx + 3];
+    const float dampenFactor = 0.98f * 0.5f;
+
+    if(gameObjects[obj1Idx] < BOUNDARY_MIN)
+    {
+        gameObjects[obj1Idx] = BOUNDARY_MIN;
+        velocity.x *= -1;
+        multiply(velocity, dampenFactor);
+    }  
+    else if (gameObjects[obj1Idx] > BOUNDARY_MAX)
+    {
+        gameObjects[obj1Idx] = BOUNDARY_MAX;
+        velocity.x *= -1;
+        multiply(velocity, dampenFactor);
+    } 
+
+    if(gameObjects[obj1Idx + 1] < BOUNDARY_MIN)
+    {
+        gameObjects[obj1Idx + 1] = BOUNDARY_MIN;
+        velocity.y *= -1;
+        multiply(velocity, dampenFactor);
+    }  
+    else if (gameObjects[obj1Idx + 1] > BOUNDARY_MAX)
+    {
+        gameObjects[obj1Idx + 1] = BOUNDARY_MAX;
+        velocity.y *= -1;
+        multiply(velocity, dampenFactor);
+    }
+
+    if(gameObjects[obj1Idx + 2] < BOUNDARY_MIN)
+    {
+        gameObjects[obj1Idx + 2] = BOUNDARY_MIN;
+        velocity.z *= -1;
+        multiply(velocity, dampenFactor);
+    }  
+    else if (gameObjects[obj1Idx + 2] > BOUNDARY_MAX)
+    {
+        gameObjects[obj1Idx + 2] = BOUNDARY_MAX;
+        velocity.z *= -1;
+        multiply(velocity, dampenFactor);
+    }
+}
+
+__device__ Vector3 checkCollision(float* gameObjects, long obj1Idx, long obj2Idx)
+{
+    // if box/cylinder and box/cylinder
+    if((gameObjects[obj1Idx + 4] == 0 || gameObjects[obj1Idx + 4] == 2) && (gameObjects[obj2Idx + 4] == 0 || gameObjects[obj2Idx + 4] == 2))
+    {
+        // AABB collision detection for boxes
+        bool xOverlap = abs(gameObjects[obj1Idx] - gameObjects[obj2Idx]) <= (gameObjects[obj1Idx + 3] + gameObjects[obj2Idx + 3]);
+        bool yOverlap = abs(gameObjects[obj1Idx + 1] - gameObjects[obj2Idx + 1]) <= (gameObjects[obj1Idx + 3] + gameObjects[obj2Idx + 3]);
+        bool zOverlap = abs(gameObjects[obj1Idx + 2] - gameObjects[obj2Idx + 2]) <= (gameObjects[obj1Idx + 3] + gameObjects[obj2Idx + 3]);
+
+        if (xOverlap && yOverlap && zOverlap)
+        {
+            Vector3 midpoint = {
+                (gameObjects[obj1Idx] + gameObjects[obj2Idx]) / 2.0f,
+                (gameObjects[obj1Idx + 1] + gameObjects[obj2Idx + 1]) / 2.0f,
+                (gameObjects[obj1Idx + 2] + gameObjects[obj2Idx + 2]) / 2.0f
+            };
+            return midpoint;
+        }
+    }
+    // else sphere - sphere
+    else if(gameObjects[obj1Idx + 4] == 1 && gameObjects[obj2Idx + 4] == 1)
+    {
+        float radiusA = gameObjects[obj1Idx];
+        float radiusB = gameObjects[obj2Idx];
+        float distance = sqrt(
+            (gameObjects[obj2Idx] - gameObjects[obj1Idx]) * (gameObjects[obj2Idx] - gameObjects[obj1Idx]) + 
+            (gameObjects[obj2Idx + 1] - gameObjects[obj1Idx + 1]) * (gameObjects[obj2Idx + 1] - gameObjects[obj1Idx + 1]) +
+            (gameObjects[obj2Idx + 2] - gameObjects[obj1Idx + 2]) * (gameObjects[obj2Idx + 2] - gameObjects[obj1Idx + 2]));
+
+        if(distance <= radiusA + radiusB)
+        {
+            Vector3 temp = Vector3{
+                gameObjects[obj2Idx] - gameObjects[obj1Idx],
+                gameObjects[obj2Idx + 1] - gameObjects[obj1Idx + 1],
+                gameObjects[obj2Idx + 2] - gameObjects[obj1Idx + 2],
+            };
+            multiply(temp, (radiusA / (radiusA + radiusB)));
+            return add(getVector3(gameObjects, obj1Idx), temp);
+        }
+    }
+    // else sphere - box/cylinder
+    else
+    {
+        Vector3 spherePos = getVector3(gameObjects, obj1Idx + (gameObjects[obj1Idx + 4] == 1 ? 0 : 6));
+        Vector3 boxPos = getVector3(gameObjects, obj2Idx + (gameObjects[obj2Idx + 4] == 1 ? 0 : 6));
+
+        // Clamp sphere position to box boundaries to find closest point
+        float halfExtent = gameObjects[obj2Idx + 3]; // Assuming uniform scale for box/cylinder
+        float clampedX = max(boxPos.x - halfExtent, min(spherePos.x, boxPos.x + halfExtent));
+        float clampedY = max(boxPos.y - halfExtent, min(spherePos.y, boxPos.y + halfExtent));
+        float clampedZ = max(boxPos.z - halfExtent, min(spherePos.z, boxPos.z + halfExtent));
+
+        Vector3 closestPoint = { clampedX, clampedY, clampedZ };
+
+        // Compute vector from sphere to closest point
+        Vector3 collisionVector = {
+            closestPoint.x - spherePos.x,
+            closestPoint.y - spherePos.y,
+            closestPoint.z - spherePos.z
+        };
+
+        float distance = sqrt(collisionVector.x * collisionVector.x + collisionVector.y * collisionVector.y + collisionVector.z * collisionVector.z);
+
+        if (distance <= gameObjects[obj1Idx + 3]) // Collision if within the sphere's radius
+        {
+            return closestPoint;
+        }
+    }
+
+    return Vector3 {0,0,0};
+}
+
+__device__ void applyForces(float* gameObjects, long obj1Idx, long obj2Idx, const Vector3& contact)
+{
+    // Get the velocities of both objects
+    Vector3 velocity1 = {
+        gameObjects[obj1Idx + 6],
+        gameObjects[obj1Idx + 7],
+        gameObjects[obj1Idx + 8]
+    };
+
+    Vector3 velocity2 = {
+        gameObjects[obj2Idx + 6],
+        gameObjects[obj2Idx + 7],
+        gameObjects[obj2Idx + 8]
+    };
+
+    // Compute the collision normal
+    Vector3 collisionNormal = {
+        gameObjects[obj2Idx] - gameObjects[obj1Idx],
+        gameObjects[obj2Idx + 1] - gameObjects[obj1Idx + 1],
+        gameObjects[obj2Idx + 2] - gameObjects[obj1Idx + 2]
+    };
+
+    // Normalize the collision normal
+    float length = sqrt(collisionNormal.x * collisionNormal.x + collisionNormal.y * collisionNormal.y + collisionNormal.z * collisionNormal.z);
+    if (length == 0) return; // Avoid division by zero
+    collisionNormal.x /= length;
+    collisionNormal.y /= length;
+    collisionNormal.z /= length;
+
+    // Compute relative velocity along the collision normal
+    Vector3 relativeVelocity = {
+        velocity2.x - velocity1.x,
+        velocity2.y - velocity1.y,
+        velocity2.z - velocity1.z
+    };
+
+    float velAlongNormal = relativeVelocity.x * collisionNormal.x +
+                            relativeVelocity.y * collisionNormal.y +
+                            relativeVelocity.z * collisionNormal.z;
+
+    // Do not apply force if velocities are separating
+    if (velAlongNormal > 0) return;
+
+    // Coefficient of restitution (bounciness)
+    float restitution = 0.8f;
+
+    // Compute impulse scalar
+    float impulseMagnitude = -(1 + restitution) * velAlongNormal;
+    impulseMagnitude /= 2;
+
+    // Compute impulse vector
+    Vector3 impulse = {
+        impulseMagnitude * collisionNormal.x,
+        impulseMagnitude * collisionNormal.y,
+        impulseMagnitude * collisionNormal.z
+    };
+
+    // Apply impulse to the velocities of both objects
+    gameObjects[obj1Idx + 6] -= impulse.x;
+    gameObjects[obj1Idx + 7] -= impulse.y;
+    gameObjects[obj1Idx + 8] -= impulse.z;
+
+    gameObjects[obj2Idx + 6] += impulse.x;
+    gameObjects[obj2Idx + 7] += impulse.y;
+    gameObjects[obj2Idx + 8] += impulse.z;
+}
+
+
+// Kernel definition using __global__ for execution on the device
+extern "C" __global__ void kernel(float* gameObjects, int numObjects, float deltaTime)
+{
+    // Calculate global thread index
+    long index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //printf("Thread: %d, n^2: %d\n", 
+    //       threadIdx.x, numObjects * numObjects);
+
+    // Check if the index is within range
+    if(index >= numObjects * numObjects)
+    {
+        return;
+    }
+
+    // Calculate the total number of unique pairs (excluding self-pairs)
+    long totalPairs = numObjects * (numObjects - 1) / 2;
+
+    //printf("Total pairs: %d\n", 
+    //       totalPairs);
+
+    // Check if the thread index is within the valid range
+    if (index >= totalPairs)
+    {
+        return;
+    }
+
+    // Find the pair (i, j) from the index using a direct mapping
+    long i = 0;
+    long j = 0;
+    long pairIndex = index;
+
+    // Find the row (i) and column (j) in the upper triangle matrix
+    while (pairIndex >= numObjects - i - 1)
+    {
+        pairIndex -= (numObjects - i - 1);
+        i++;
+    }
+    j = i + 1 + pairIndex;
+
+    const int numberOfAttributes = 9;
+    long obj1Idx = i * numberOfAttributes;
+    long obj2Idx = j * numberOfAttributes;
+
+    //printf("obj1Idx = %ld, obj2Idx = %ld\n", 
+    //       obj1Idx, obj2Idx);
+
+    if(gameObjects[obj1Idx + 5] == 0 || gameObjects[obj2Idx + 5] == 0)
+    {
+        return;
+    }
+
+    const Vector3 GRAVITY = Vector3{ 0, -9.81f, 0 };
+    const float dampenFactor = 0.98f;
+
+    Vector3 velocity1 = GRAVITY;
+    multiply(velocity1, deltaTime);
+
+    Vector3 velocity2 = GRAVITY;
+    multiply(velocity2, deltaTime);
+
+
+    gameObjects[obj1Idx + 1] += velocity1.y;
+    gameObjects[obj2Idx + 1] += velocity2.y;
+
+    Vector3 contact = checkCollision(gameObjects, obj1Idx, obj2Idx);
+    if(contact.x != 0 && contact.y != 0 && contact.z != 0)
+    {
+        printf("Collision detected!\n");
+        applyForces(gameObjects, obj1Idx, obj2Idx, contact);
+    }
+
+    applyBoundaryCollision(gameObjects, velocity1, obj1Idx);
+    applyBoundaryCollision(gameObjects, velocity2, obj2Idx);
+
+    Vector3 temp1 = Vector3{ gameObjects[obj1Idx + 6], gameObjects[obj1Idx + 7], gameObjects[obj1Idx + 8] };
+    Vector3 temp2 = Vector3{ gameObjects[obj2Idx + 6], gameObjects[obj2Idx + 7], gameObjects[obj2Idx + 8] };
+
+    velocity1 = add(velocity1, temp1);
+    velocity2 = add(velocity2, temp2);
+
+    multiply(velocity1, dampenFactor);
+    multiply(velocity2, dampenFactor);
+
+    /*
+    printf("DeltaTime %f\n", 
+           deltaTime);
+    printf("Thread %d: obj1Idx = %ld, obj2Idx = %ld, obj1 positionY = %.2f, obj2 positionY = %.2f After\n", 
+           threadIdx.x, obj1Idx, obj2Idx, gameObjects[obj1Idx + 1], gameObjects[obj2Idx + 1]);
+    */
+}
